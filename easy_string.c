@@ -60,8 +60,8 @@ String es_copy_cstrn(const char* str, size_t size)
 String es_move(String* str)
 {
 	String result = *str;
-	if(!shortstring_optimized(&str))
-		str = es_empty_string;
+	if(!shortstring_optimized(str))
+		*str = es_empty_string;
 	return result;
 }
 
@@ -85,10 +85,10 @@ String es_move_cstrn(char* str, size_t size)
 }
 
 StringRef es_ref(const String* str)
-{ return es_temp_cstrn( ES_STRINGSIZE(str)); }
+{ return es_tempn( ES_STRINGSIZE(str) ); }
 
 StringRef es_temp(const char* str)
-{ return es_temp_cstr(str, strlen(str)); }
+{ return es_tempn(str, strlen(str) ); }
 
 StringRef es_tempn(const char* str, size_t size)
 {
@@ -192,7 +192,7 @@ String es_readline(FILE* stream, char delim, size_t max)
 		String new_result = es_cat(
 			es_ref(&result),
 			es_tempn(buffer, amount_read));
-		es_free(result);
+		es_free(&result);
 		result = new_result;
 
 	//Repeat until Error, delimiter found, or max reached.
