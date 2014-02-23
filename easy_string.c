@@ -29,6 +29,7 @@ static inline char* autoalloc(String* str, size_t size)
 	{
 		char* mem = calloc(size + 1, 1);
 		str->begin = mem;
+		str->alloc_end = mem+size+1;
 		return mem;
 	}
 	else
@@ -36,7 +37,6 @@ static inline char* autoalloc(String* str, size_t size)
 		return str->shortstr;
 	}
 }
-
 const char* es_cstr(const String* str)
 { return shortstring_optimized(str) ? str->shortstr : str->begin; }
 
@@ -44,7 +44,7 @@ void es_free(String* str)
 { if(!shortstring_optimized(str)) free(str->begin); }
 
 String es_copy(StringRef str)
-{ return es_copy_cstrn(ES_STRREFSIZE(&str)); }
+{ return es_copy_cstrn( ES_STRREFSIZE(&str) ); }
 
 String es_copy_cstr(const char* str)
 { return es_copy_cstrn(str, strlen(str)); }
@@ -80,6 +80,7 @@ String es_move_cstrn(char* str, size_t size)
 	else
 	{
 		result.begin = str;
+		result.alloc_end = str + size + 1;
 	}
 	return result;
 }
@@ -99,52 +100,66 @@ StringRef es_tempn(const char* str, size_t size)
 static inline size_t min_size(size_t x, size_t y)
 { return x < y ? x : y; }
 
-StringRef es_slice(StringRef ref, size_t offset, size_t size)
+static inline void update_slice_indexes(size_t str_size, long* offset,
+	long* size)
 {
-	if(size <= 0 || offset >= ref.size)
+	if(*offset < 0) *offset = str_size + *offset;
+	if(*size < 0) *size = str_size + *size;
+
+	if(*offset < 0) *offset = 0;
+
+	if(*size <= 0 || *offset >= str_size)
+		*size = 0;
+	else
+		*size = min_size(*size, str_size - offset);
+}
+
+
+StringRef es_slice(StringRef ref, long offset, long size)
+{
+	update_slice_indexes(ref.size, &offset, &size);
+	if(size == 0)
 		return es_null_ref;
 
-	StringRef result = {ref.begin + offset, min_size(size, ref.size - offset)};
+	StringRef result = {ref.begin + offset, size};
 	return result;
 }
 
-String es_slices(String str, size_t offset, size_t size)
+String es_slices(String str, long offset, long size)
 {
-	//Get the actual size, without overflowing str.size
-	size_t actual_size = offset >= str.size ?
-		0 : min_size(size, offset - size);
+	update_slice_indexes(str.size, &offset, &size);
 
 	//Just clear the string if the result will be empty
-	if(actual_size == 0)
+	if(size == 0)
 	{
 		es_clear(&str);
 	}
 
 	//If the slice will be a shortstring
-	else if(shortstring(actual_size))
+	else if(shortstring(size))
 	{
 		//If the string is already a shortstring, just memmove
 		if(shortstring_optimized(&str))
 		{
-			memmove(str.shortstr, str.shortstr+offset, actual_size);
-			str.shortstr[actual_size] = '\0';
+			memmove(str.shortstr, str.shortstr+offset, size);
+			str.shortstr[size] = '\0';
 		}
 		//Otherwise, memcpy then free the used memory
 		else
 		{
 			char* ptr = str.begin;
-			memcpy(str.shortstr, str.begin + offset, actual_size);
-			str.shortstr[actual_size] = '\0';
+			memcpy(str.shortstr, str.begin + offset, size);
+			str.shortstr[size] = '\0';
 			free(ptr);
 		}
 	}
 	//If the slice is not a shortstring, just memmove
 	else
 	{
-		memmove(str.begin, str.begin + offset, actual_size);
-		str.begin[actual_size] = '\0';
+		memmove(str.begin, str.begin + offset, size);
+		str.begin[size] = '\0';
 	}
-	str.size = actual_size;
+	str.size = size;
 	return str;
 }
 
@@ -155,6 +170,58 @@ String es_cat(StringRef str1, StringRef str2)
 	memcpy(dest, str1.begin, str1.size);
 	memcpy(dest + str1.size, str2.begin, str2.size);
 	return result;
+}
+
+String es_append(String str1, StringRef str2)
+{
+	size_t final_size = str1.size + str2.size;
+
+	//If the resultant string is a shortstring
+	if(shortstring(final_size))
+	{
+		//We can assume str1 is also a shortstring. Copy str2 and return.
+		memcpy(str1.shortstr + str1.size, str2.begin, str2.size);
+		str1.size = final_size;
+		str1.shortstr[final_size] = '\0';
+		return str1;
+	}
+	else
+	{
+		/*
+		 * Just make a whole new string if:
+		 *   str1 is a shortstring but the final string isn't
+		 *   there isn't enough room in str1's buffer
+		 */
+		if(shortstring_optimized(&str1) ||
+			final_size > ((str1.alloc_end - 1) - str1.begin))
+		{
+			String result = es_cat(es_ref(&str1), str2);
+			es_free(str1);
+			return result;
+		}
+		else
+		{
+			memcpy(str1.shortstr + str1.size, str2.begin, str2.size);
+			str1.size = final_size;
+			str1.begin[final_size] = '\0';
+			return str1;
+		}
+	}
+}
+
+int es_sizecmp(size_t str1, size_t str2)
+{ return str1 < str2 ? -1 : str1 > str2 ? 1 : 0; }
+
+int es_compare(StringRef str1, StringRef str2)
+{
+	int sizecmp = es_sizecmp(str1.size, str2.size);
+	if(sizecmp) return sizecmp;
+	else return memcmp(str1.begin, str2.begin, str1.size);
+}
+
+int es_prefix(StringRef str1, StringRef str2)
+{
+	return memcmp(str1.begin, str2.begin, min_size(str1.size, str2.size));
 }
 
 const static size_t buffer_size = 4096;
@@ -189,11 +256,7 @@ String es_readline(FILE* stream, char delim, size_t max)
 				break;
 		}
 		//Concat the bytes into the result string
-		String new_result = es_cat(
-			es_ref(&result),
-			es_tempn(buffer, amount_read));
-		es_free(&result);
-		result = new_result;
+		result = es_append(es_move(&result), es_temp(buffer, amount_read));
 
 	//Repeat until Error, delimiter found, or max reached.
 	} while(c != EOF && c != delim && max);

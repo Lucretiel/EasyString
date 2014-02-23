@@ -8,34 +8,35 @@
  *  fast as plain char*, but much much safer and easier to work with.
  *  Internally consistent allocation and ownership semantics, plus short
  *  string optimization.
+ *
+ *  This library defines 2 types:
+ *  - Strings are structs with ownership semantics; they always are considered
+ *    to own their contents. They can be copied and moved. They should only be
+ *    passed by value with care, because this is like a move (the new string
+ *    owns its contents) but the old one isn't cleared safely. String objects
+ *    are always null-terminated.
+ *  - StringRefs are non-owning strings. They consist of a char* and a size, and
+ *    can refer to both String objects and C-style char* strings.
  */
 
 #pragma once
 
 #include <stdio.h>
 
-/*
- * Strings have ownership semantics. They should only be copied by value with
- * care; use the es_copy and es_move functions instead. Generally copying by
- * value is the same as a move, except that the old string isn't cleared. They
- * are null-terminated
- */
+//String type
+#define STRING_DATA struct { char* begin; char* alloc_end; }
 typedef struct
 {
 	union
 	{
-		char* begin;
-		char shortstr[sizeof(char*)];
+		STRING_DATA;
+		char shortstr[sizeof(STRING_DATA)];
 	};
 	size_t size;
 } String;
+#undef STRING_DATA
 
-/*
- * StringRefs do not have ownership. Their lifetime should be bound to that
- * of the String they reference. They can by copied safely. They always
- * reference null-terminated data, but the null may not nessesarily be at
- * begin[size].
- */
+//StringRef type
 typedef struct
 {
 	const char* begin;
@@ -46,7 +47,7 @@ typedef struct
 const static String es_empty_string;
 const static StringRef es_null_ref;
 
-//Get a pointer to the string.
+//Get string pointer from a string
 const char* es_cstr(const String* str);
 
 //Convenience macro for using in functions that take a char* and size
@@ -76,13 +77,21 @@ StringRef es_temp(const char* str);
 StringRef es_tempn(const char* str, size_t size);
 
 //Make a string slice
-StringRef es_slice(StringRef ref, size_t offset, size_t size);
+StringRef es_slice(StringRef ref, long offset, long size);
 
 //Make a string slice, reusing the buffer
-String es_slices(String str, size_t offset, size_t size);
+String es_slices(String str, long offset, long size);
 
 // Concatenate 2 strings.
 String es_cat(StringRef str1, StringRef str2);
+
+//Append to a string.
+String es_append(String str1, StringRef str2);
+
+//Comparison
+int es_sizecmp(size_t str1, size_t str2);
+int es_compare(StringRef str1, StringRef str2);
+int es_prefix(StringRef str1, StringRef str2);
 
 // Read up to a delimiting character from the FILE*. Adds null terminator
 String es_readline(FILE* stream, char delim, size_t max);
