@@ -44,7 +44,7 @@ void es_free(String* str)
 { if(!shortstring_optimized(str)) free(str->begin); }
 
 String es_copy(StringRef str)
-{ return es_copy_cstrn(STRINGREF_CSTR_SIZE(&str)); }
+{ return es_copy_cstrn(ES_STRREFSIZE(&str)); }
 
 String es_copy_cstr(const char* str)
 { return es_copy_cstrn(str, strlen(str)); }
@@ -85,7 +85,7 @@ String es_move_cstrn(char* str, size_t size)
 }
 
 StringRef es_ref(const String* str)
-{ return es_temp_cstrn( STRING_CSTR_SIZE(str)); }
+{ return es_temp_cstrn( ES_STRINGSIZE(str)); }
 
 StringRef es_temp(const char* str)
 { return es_temp_cstr(str, strlen(str)); }

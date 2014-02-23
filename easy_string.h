@@ -50,8 +50,8 @@ const static StringRef es_null_ref;
 const char* es_cstr(const String* str);
 
 //Convenience macro for using in functions that take a char* and size
-#define STRING_CSTR_SIZE(STR) (string_cstr(STR)), ((STR)->size)
-#define STRINGREF_CSTR_SIZE(REF) ((REF)->begin), ((REF)->size)
+#define ES_STRINGSIZE(STR) (string_cstr(STR)), ((STR)->size)
+#define ES_STRREFSIZE(REF) ((REF)->begin), ((REF)->size)
 
 //Free a string without cleaning up. Use at the end of scope.
 void es_free(String* str);
