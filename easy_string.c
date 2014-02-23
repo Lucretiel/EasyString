@@ -7,11 +7,14 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include "easy_string.h"
+
+const static size_t shortstring_max = sizeof(es_empty_string.shortstr) - 1;
 
 //True if a string of this length is shortstring optimized
 static inline int shortstring(size_t size)
-{ return size <= shortstr_max; }
+{ return size <= shortstring_max; }
 
 //True if this string is shortstring optimized
 static inline int shortstring_optimized(const String* str)
@@ -105,6 +108,46 @@ StringRef es_slice(StringRef ref, size_t offset, size_t size)
 	return result;
 }
 
+String es_slices(String str, size_t offset, size_t size)
+{
+	//Get the actual size, without overflowing str.size
+	size_t actual_size = offset >= str.size ?
+		0 : min_size(size, offset - size);
+
+	//Just clear the string if the result will be empty
+	if(actual_size == 0)
+	{
+		es_clear(&str);
+	}
+
+	//If the slice will be a shortstring
+	else if(shortstring(actual_size))
+	{
+		//If the string is already a shortstring, just memmove
+		if(shortstring_optimized(&str))
+		{
+			memmove(str.shortstr, str.shortstr+offset, actual_size);
+			str.shortstr[actual_size] = '\0';
+		}
+		//Otherwise, memcpy then free the used memory
+		else
+		{
+			char* ptr = str.begin;
+			memcpy(str.shortstr, str.begin + offset, actual_size);
+			str.shortstr[actual_size] = '\0';
+			free(ptr);
+		}
+	}
+	//If the slice is not a shortstring, just memmove
+	else
+	{
+		memmove(str.begin, str.begin + offset, actual_size);
+		str.begin[actual_size] = '\0';
+	}
+	str.size = actual_size;
+	return str;
+}
+
 String es_cat(StringRef str1, StringRef str2)
 {
 	String result = es_empty_string;
@@ -115,7 +158,7 @@ String es_cat(StringRef str1, StringRef str2)
 }
 
 const static size_t buffer_size = 4096;
-String string_read_line(FILE* stream, char delim, size_t max)
+String es_readline(FILE* stream, char delim, size_t max)
 {
 	String result = es_empty_string;
 
@@ -157,4 +200,7 @@ String string_read_line(FILE* stream, char delim, size_t max)
 
 	return result;
 }
+
+String es_readanyline(FILE* stream, char delim)
+{ return es_readline(stream, delim, SIZE_MAX); }
 

@@ -17,21 +17,24 @@
 /*
  * Strings have ownership semantics. They should only be copied by value with
  * care; use the es_copy and es_move functions instead. Generally copying by
- * value is the same as a move, except that the old string isn't cleared.
+ * value is the same as a move, except that the old string isn't cleared. They
+ * are null-terminated
  */
 typedef struct
 {
 	union
 	{
 		char* begin;
-		char shortstr[3*sizeof(char*)];
+		char shortstr[sizeof(char*)];
 	};
 	size_t size;
 } String;
 
 /*
  * StringRefs do not have ownership. Their lifetime should be bound to that
- * of the String they reference. They can by copied safely
+ * of the String they reference. They can by copied safely. They always
+ * reference null-terminated data, but the null may not nessesarily be at
+ * begin[size].
  */
 typedef struct
 {
@@ -39,9 +42,9 @@ typedef struct
 	size_t size;
 } StringRef;
 
+//Empty values to initialize to
 const static String es_empty_string;
 const static StringRef es_null_ref;
-const static size_t shortstr_max = sizeof(empty_string.shortstr) - 1;
 
 //Get a pointer to the string.
 const char* es_cstr(const String* str);
@@ -49,17 +52,13 @@ const char* es_cstr(const String* str);
 //Convenience macro for using in functions that take a char* and size
 #define STRING_CSTR_SIZE(STR) (string_cstr(STR)), ((STR)->size)
 #define STRINGREF_CSTR_SIZE(REF) ((REF)->begin), ((REF)->size)
-/*
- * Example:
- *
- * char* dest;
- * String str = ...
- * memcpy(dest, STRING_CSTR_SIZE(&str)) //fills in both fields
- */
 
+//Free a string without cleaning up. Use at the end of scope.
 void es_free(String* str);
+
+//Free and clean up resources.
 static inline void es_clear(String* str)
-{ es_free(str); *str = empty_string; }
+{ es_free(str); *str = es_empty_string; }
 
 //Make new string, by copy
 String es_copy(StringRef str);
@@ -76,13 +75,18 @@ StringRef es_ref(const String* str);
 StringRef es_temp(const char* str);
 StringRef es_tempn(const char* str, size_t size);
 
-//Make a string ref slice
+//Make a string slice
 StringRef es_slice(StringRef ref, size_t offset, size_t size);
+
+//Make a string slice, reusing the buffer
+String es_slices(String str, size_t offset, size_t size);
 
 // Concatenate 2 strings.
 String es_cat(StringRef str1, StringRef str2);
 
 // Read up to a delimiting character from the FILE*. Adds null terminator
-String string_read_line(FILE* stream, char delim, size_t max);
+String es_readline(FILE* stream, char delim, size_t max);
 //Note that the returned string may have max+1 characters, if max is reached,
 //for the null terminator.
+
+String es_readanyline(FILE* stream, char delim);
