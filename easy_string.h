@@ -82,11 +82,14 @@ StringRef es_slice(StringRef ref, long offset, long size);
 //Make a string slice, reusing the buffer
 String es_slices(String str, long offset, long size);
 
-// Concatenate 2 strings.
+//Concatenate 2 strings.
 String es_cat(StringRef str1, StringRef str2);
 
 //Append to a string.
 String es_append(String str1, StringRef str2);
+
+//Convert a string to lower
+String es_tolower(StringRef str);
 
 //Comparison
 int es_sizecmp(size_t str1, size_t str2);

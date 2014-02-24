@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <ctype.h>
 #include "easy_string.h"
 
 const static size_t shortstring_max = sizeof(es_empty_string.shortstr) - 1;
@@ -111,7 +112,7 @@ static inline void update_slice_indexes(size_t str_size, long* offset,
 	if(*size <= 0 || *offset >= str_size)
 		*size = 0;
 	else
-		*size = min_size(*size, str_size - offset);
+		*size = min_size(*size, str_size - *offset);
 }
 
 
@@ -196,7 +197,7 @@ String es_append(String str1, StringRef str2)
 			final_size > ((str1.alloc_end - 1) - str1.begin))
 		{
 			String result = es_cat(es_ref(&str1), str2);
-			es_free(str1);
+			es_free(&str1);
 			return result;
 		}
 		else
@@ -207,6 +208,15 @@ String es_append(String str1, StringRef str2)
 			return str1;
 		}
 	}
+}
+
+String es_tolower(StringRef str)
+{
+	String result = es_empty_string;
+	char* copy = autoalloc(&result, str.size);
+	for(size_t i = 0; i < str.size; ++i)
+		copy[i] = tolower(str.begin[i]);
+	return result;
 }
 
 int es_sizecmp(size_t str1, size_t str2)
@@ -256,7 +266,7 @@ String es_readline(FILE* stream, char delim, size_t max)
 				break;
 		}
 		//Concat the bytes into the result string
-		result = es_append(es_move(&result), es_temp(buffer, amount_read));
+		result = es_append(es_move(&result), es_tempn(buffer, amount_read));
 
 	//Repeat until Error, delimiter found, or max reached.
 	} while(c != EOF && c != delim && max);
