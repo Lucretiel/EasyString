@@ -5,13 +5,13 @@
  *      Author: nathan
  */
 
-#include <string.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <ctype.h>
+#include <string.h> //String ops. copy, cmp, etc
+#include <stdlib.h> //Allocation
+#include <stdint.h> //SIZE_MAX
+#include <ctype.h> //tolower
 #include "easy_string.h"
 
-const static size_t shortstring_max = sizeof(es_empty_string.shortstr) - 1;
+const static size_t shortstring_max = sizeof(es_empty_string.shortstr);
 
 //True if a string of this length is shortstring optimized
 static inline int shortstring(size_t size)
@@ -28,9 +28,9 @@ static inline char* autoalloc(String* str, size_t size)
 	str->size = size;
 	if(!shortstring(size))
 	{
-		char* mem = calloc(size + 1, 1);
+		char* mem = malloc(size);
 		str->begin = mem;
-		str->alloc_end = mem+size+1;
+		str->alloc_end = mem + size;
 		return mem;
 	}
 	else
@@ -81,7 +81,7 @@ String es_move_cstrn(char* str, size_t size)
 	else
 	{
 		result.begin = str;
-		result.alloc_end = str + size + 1;
+		result.alloc_end = str + size;
 	}
 	return result;
 }
@@ -101,15 +101,25 @@ StringRef es_tempn(const char* str, size_t size)
 static inline size_t min_size(size_t x, size_t y)
 { return x < y ? x : y; }
 
+/*
+ * Helper function to compute true offset and size for slices. Logic:
+ * - For negative offset, set to stringsize + offset
+ *   - So, for a string length of 10, offset -1 becomes 9
+ * - For negative size, set to stingsize + offset
+ *   - So, for a string length of 10, size -3 becomes 7
+ * - If offset is still negative, make an empty slice
+ * - if size is still negative, make an empty slice
+ * - If offset is past the string size, make an empty slice
+ * - Otherwise, make a slice such that the size is not past the end of the
+ *   string, given the offset
+ */
 static inline void update_slice_indexes(size_t str_size, long* offset,
 	long* size)
 {
 	if(*offset < 0) *offset = str_size + *offset;
 	if(*size < 0) *size = str_size + *size;
 
-	if(*offset < 0) *offset = 0;
-
-	if(*size <= 0 || *offset >= str_size)
+	if(*size <= 0 || *offset < 0 || *offset >= str_size)
 		*size = 0;
 	else
 		*size = min_size(*size, str_size - *offset);
@@ -141,25 +151,21 @@ String es_slices(String str, long offset, long size)
 	{
 		//If the string is already a shortstring, just memmove
 		if(shortstring_optimized(&str))
-		{
 			memmove(str.shortstr, str.shortstr+offset, size);
-			str.shortstr[size] = '\0';
-		}
+
 		//Otherwise, memcpy then free the used memory
 		else
 		{
 			char* ptr = str.begin;
 			memcpy(str.shortstr, str.begin + offset, size);
-			str.shortstr[size] = '\0';
 			free(ptr);
 		}
 	}
+
 	//If the slice is not a shortstring, just memmove
 	else
-	{
 		memmove(str.begin, str.begin + offset, size);
-		str.begin[size] = '\0';
-	}
+
 	str.size = size;
 	return str;
 }
@@ -183,28 +189,30 @@ String es_append(String str1, StringRef str2)
 		//We can assume str1 is also a shortstring. Copy str2 and return.
 		memcpy(str1.shortstr + str1.size, str2.begin, str2.size);
 		str1.size = final_size;
-		str1.shortstr[final_size] = '\0';
 		return str1;
 	}
 	else
 	{
 		/*
 		 * Just make a whole new string if:
-		 *   str1 is a shortstring but the final string isn't
-		 *   there isn't enough room in str1's buffer
+		 * - str1 is a shortstring but the final string isn't
+		 * - There isn't enough room in str1's buffer
 		 */
 		if(shortstring_optimized(&str1) ||
-			final_size > ((str1.alloc_end - 1) - str1.begin))
+			final_size > (str1.alloc_end - str1.begin))
 		{
 			String result = es_cat(es_ref(&str1), str2);
 			es_free(&str1);
 			return result;
 		}
+		/*
+		 * If there's room in the buffer, memcpy to it.
+		 * This can really only happen if it was previously es_slices'd
+		 */
 		else
 		{
 			memcpy(str1.shortstr + str1.size, str2.begin, str2.size);
 			str1.size = final_size;
-			str1.begin[final_size] = '\0';
 			return str1;
 		}
 	}
@@ -217,6 +225,29 @@ String es_tolower(StringRef str)
 	for(size_t i = 0; i < str.size; ++i)
 		copy[i] = tolower(str.begin[i]);
 	return result;
+}
+
+static inline int char_value(char c)
+{
+	return c < '0' || c > '9' ? -1 : c - '0';
+}
+
+int es_toul(unsigned long* result, StringRef str)
+{
+	unsigned long count = 0;
+	for(int i = 0; i <= str.size; ++i)
+	{
+		unsigned long decimal = char_value(str.begin[i]);
+		if(decimal == -1) return 1;
+		const unsigned long old_count = count;
+		count *= 10;
+		//TODO: potential uncaught overflow?
+		//TODO: better algorithm
+		if(count < old_count) return 1;
+		count += decimal;
+	}
+	*result = count;
+	return 0;
 }
 
 int es_sizecmp(size_t str1, size_t str2)

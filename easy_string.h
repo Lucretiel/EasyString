@@ -1,5 +1,5 @@
 /*
- * good_string.h
+ * easy_string.h
  *
  *  Created on: Feb 19, 2014
  *      Author: nathan
@@ -13,8 +13,7 @@
  *  - Strings are structs with ownership semantics; they always are considered
  *    to own their contents. They can be copied and moved. They should only be
  *    passed by value with care, because this is like a move (the new string
- *    owns its contents) but the old one isn't cleared safely. String objects
- *    are always null-terminated.
+ *    owns its contents) but the old one isn't cleared safely.
  *  - StringRefs are non-owning strings. They consist of a char* and a size, and
  *    can refer to both String objects and C-style char* strings.
  */
@@ -93,14 +92,18 @@ String es_append(String str1, StringRef str2);
 //Convert a string to lower
 String es_tolower(StringRef str);
 
+/*
+ * Convert a string to an unsigned long, or return an error code
+ */
+int es_toul(unsigned long* result, StringRef str);
+//TODO: other numeric conversions
+
 //Comparison
 int es_sizecmp(size_t str1, size_t str2);
 int es_compare(StringRef str1, StringRef str2);
 int es_prefix(StringRef str1, StringRef str2);
 
-// Read up to a delimiting character from the FILE*. Adds null terminator
+// Read up to a delimiting character from the FILE*.
 String es_readline(FILE* stream, char delim, size_t max);
-//Note that the returned string may have max+1 characters, if max is reached,
-//for the null terminator.
 
 String es_readanyline(FILE* stream, char delim);
