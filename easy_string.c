@@ -38,7 +38,11 @@ static inline char* autoalloc(String* str, size_t size)
 		return str->shortstr;
 	}
 }
-const char* es_cstr(const String* str)
+
+char* es_cstr(String* str)
+{ return shortstring_optimized(str) ? str->shortstr : str->begin; }
+
+const char* es_cstrc(const String* str)
 { return shortstring_optimized(str) ? str->shortstr : str->begin; }
 
 void es_free(String* str)
@@ -87,7 +91,7 @@ String es_move_cstrn(char* str, size_t size)
 }
 
 StringRef es_ref(const String* str)
-{ return es_tempn( ES_STRINGSIZE(str) ); }
+{ return es_tempn( ES_STRCNSTSIZE(str) ); }
 
 StringRef es_temp(const char* str)
 { return es_tempn(str, strlen(str) ); }
@@ -136,38 +140,37 @@ StringRef es_slice(StringRef ref, long offset, long size)
 	return result;
 }
 
-String es_slices(String str, long offset, long size)
+void es_slices(String* str, long offset, long size)
 {
-	update_slice_indexes(str.size, &offset, &size);
+	update_slice_indexes(str->size, &offset, &size);
 
 	//Just clear the string if the result will be empty
 	if(size == 0)
 	{
-		es_clear(&str);
+		es_clear(str);
 	}
 
 	//If the slice will be a shortstring
 	else if(shortstring(size))
 	{
 		//If the string is already a shortstring, just memmove
-		if(shortstring_optimized(&str))
-			memmove(str.shortstr, str.shortstr+offset, size);
+		if(shortstring_optimized(str))
+			memmove(str->shortstr, str->shortstr + offset, size);
 
 		//Otherwise, memcpy then free the used memory
 		else
 		{
-			char* ptr = str.begin;
-			memcpy(str.shortstr, str.begin + offset, size);
+			char* ptr = str->begin;
+			memcpy(str->shortstr, str->begin + offset, size);
 			free(ptr);
 		}
 	}
 
 	//If the slice is not a shortstring, just memmove
 	else
-		memmove(str.begin, str.begin + offset, size);
+		memmove(str->begin, str->begin + offset, size);
 
-	str.size = size;
-	return str;
+	str->size = size;
 }
 
 String es_cat(StringRef str1, StringRef str2)
@@ -179,17 +182,16 @@ String es_cat(StringRef str1, StringRef str2)
 	return result;
 }
 
-String es_append(String str1, StringRef str2)
+void es_append(String* str1, StringRef str2)
 {
-	size_t final_size = str1.size + str2.size;
+	size_t final_size = str1->size + str2.size;
 
 	//If the resultant string is a shortstring
 	if(shortstring(final_size))
 	{
 		//We can assume str1 is also a shortstring. Copy str2 and return.
-		memcpy(str1.shortstr + str1.size, str2.begin, str2.size);
-		str1.size = final_size;
-		return str1;
+		memcpy(str1->shortstr + str1->size, str2.begin, str2.size);
+		str1->size = final_size;
 	}
 	else
 	{
@@ -198,12 +200,12 @@ String es_append(String str1, StringRef str2)
 		 * - str1 is a shortstring but the final string isn't
 		 * - There isn't enough room in str1's buffer
 		 */
-		if(shortstring_optimized(&str1) ||
-			final_size > (str1.alloc_end - str1.begin))
+		if(shortstring_optimized(str1) ||
+			final_size > (str1->alloc_end - str1->begin))
 		{
-			String result = es_cat(es_ref(&str1), str2);
-			es_free(&str1);
-			return result;
+			String result = es_cat(es_ref(str1), str2);
+			es_free(str1);
+			*str1 = result;
 		}
 		/*
 		 * If there's room in the buffer, memcpy to it.
@@ -211,9 +213,8 @@ String es_append(String str1, StringRef str2)
 		 */
 		else
 		{
-			memcpy(str1.shortstr + str1.size, str2.begin, str2.size);
-			str1.size = final_size;
-			return str1;
+			memcpy(str1->begin + str1->size, str2.begin, str2.size);
+			str1->size = final_size;
 		}
 	}
 }
@@ -242,7 +243,6 @@ int es_toul(unsigned long* result, StringRef str)
 		const unsigned long old_count = count;
 		count *= 10;
 		//TODO: potential uncaught overflow?
-		//TODO: better algorithm
 		if(count < old_count) return 1;
 		count += decimal;
 	}
@@ -297,7 +297,7 @@ String es_readline(FILE* stream, char delim, size_t max)
 				break;
 		}
 		//Concat the bytes into the result string
-		result = es_append(es_move(&result), es_tempn(buffer, amount_read));
+		es_append(&result, es_tempn(buffer, amount_read));
 
 	//Repeat until Error, delimiter found, or max reached.
 	} while(c != EOF && c != delim && max);

@@ -47,12 +47,15 @@ const static String es_empty_string;
 const static StringRef es_null_ref;
 
 //Get string pointer from a string
-const char* es_cstr(const String* str);
+char* es_cstr(String* str);
+const char* es_cstrc(const String* str);
 
 //Convenience macro for using in functions that take a char* and size
 #define ES_STRINGSIZE(STR) (es_cstr(STR)), ((STR)->size)
-#define ES_STRREFSIZE(REF) ((REF)->begin), ((REF)->size)
+#define ES_STRCNSTSIZE(STR) (es_cstrc(STR)), ((STR)->size)
 #define ES_SIZESTRING(STR) ((STR)->size), (es_cstr(STR))
+#define ES_SIZESTRCNST(STR) ((STR)->size), (es_cstrc(STR))
+#define ES_STRREFSIZE(REF) ((REF)->begin), ((REF)->size)
 #define ES_SIZESTRREF(REF) ((REF)->size), ((REF)->begin)
 
 //Free a string without cleaning up. Use at the end of scope.
@@ -81,13 +84,13 @@ StringRef es_tempn(const char* str, size_t size);
 StringRef es_slice(StringRef ref, long offset, long size);
 
 //Make a string slice, reusing the buffer
-String es_slices(String str, long offset, long size);
+void es_slices(String* str, long offset, long size);
 
 //Concatenate 2 strings.
 String es_cat(StringRef str1, StringRef str2);
 
 //Append to a string.
-String es_append(String str1, StringRef str2);
+void es_append(String* str1, StringRef str2);
 
 //Convert a string to lower
 String es_tolower(StringRef str);
