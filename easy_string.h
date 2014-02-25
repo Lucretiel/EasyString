@@ -53,6 +53,8 @@ const char* es_cstr(const String* str);
 //Convenience macro for using in functions that take a char* and size
 #define ES_STRINGSIZE(STR) (es_cstr(STR)), ((STR)->size)
 #define ES_STRREFSIZE(REF) ((REF)->begin), ((REF)->size)
+#define ES_SIZESTRING(STR) ((STR)->size), (es_cstr(STR))
+#define ES_SIZESTRREF(REF) ((REF)->size), ((REF)->begin)
 
 //Free a string without cleaning up. Use at the end of scope.
 void es_free(String* str);
