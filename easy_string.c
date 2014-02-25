@@ -105,32 +105,17 @@ StringRef es_tempn(const char* str, size_t size)
 static inline size_t min_size(size_t x, size_t y)
 { return x < y ? x : y; }
 
-/*
- * Helper function to compute true offset and size for slices. Logic:
- * - For negative offset, set to stringsize + offset
- *   - So, for a string length of 10, offset -1 becomes 9
- * - For negative size, set to stingsize + offset
- *   - So, for a string length of 10, size -3 becomes 7
- * - If offset is still negative, make an empty slice
- * - if size is still negative, make an empty slice
- * - If offset is past the string size, make an empty slice
- * - Otherwise, make a slice such that the size is not past the end of the
- *   string, given the offset
- */
-static inline void update_slice_indexes(size_t str_size, long* offset,
-	long* size)
+static inline void update_slice_indexes(size_t str_size, size_t* offset,
+	size_t* size)
 {
-	if(*offset < 0) *offset = str_size + *offset;
-	if(*size < 0) *size = str_size + *size;
-
-	if(*size <= 0 || *offset < 0 || *offset >= str_size)
+	if(*offset >= str_size)
 		*size = 0;
 	else
 		*size = min_size(*size, str_size - *offset);
 }
 
 
-StringRef es_slice(StringRef ref, long offset, long size)
+StringRef es_slice(StringRef ref, size_t offset, size_t size)
 {
 	update_slice_indexes(ref.size, &offset, &size);
 	if(size == 0)
@@ -140,7 +125,7 @@ StringRef es_slice(StringRef ref, long offset, long size)
 	return result;
 }
 
-void es_slices(String* str, long offset, long size)
+void es_slices(String* str, size_t offset, size_t size)
 {
 	update_slice_indexes(str->size, &offset, &size);
 

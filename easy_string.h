@@ -13,9 +13,9 @@
  *  - Strings are structs with ownership semantics; they always are considered
  *    to own their contents. They can be copied and moved. They should only be
  *    passed by value with care, because this is like a move (the new string
- *    owns its contents) but the old one isn't cleared safely.
- *  - StringRefs are non-owning strings. They consist of a char* and a size, and
- *    can refer to both String objects and C-style char* strings.
+ *    owns its contents) but the old one isn't freed or cleared safely.
+ *  - StringRefs are non-owning strings. They consist of a const char* and a
+ *    size, and can refer to both String objects and C-style char* strings.
  */
 
 #pragma once
@@ -39,7 +39,7 @@ typedef struct
 typedef struct
 {
 	const char* begin;
-	size_t size;
+	const size_t size;
 } StringRef;
 
 //Empty values to initialize to
@@ -81,10 +81,10 @@ StringRef es_temp(const char* str);
 StringRef es_tempn(const char* str, size_t size);
 
 //Make a string slice
-StringRef es_slice(StringRef ref, long offset, long size);
+StringRef es_slice(StringRef ref, size_t offset, size_t size);
 
 //Make a string slice, reusing the buffer
-void es_slices(String* str, long offset, long size);
+void es_slices(String* str, size_t offset, size_t size);
 
 //Concatenate 2 strings.
 String es_cat(StringRef str1, StringRef str2);
@@ -95,16 +95,14 @@ void es_append(String* str1, StringRef str2);
 //Convert a string to lower
 String es_tolower(StringRef str);
 
-/*
- * Convert a string to an unsigned long, or return an error code
- */
+//Convert a string to an unsigned long, or return an error code
 int es_toul(unsigned long* result, StringRef str);
 //TODO: other numeric conversions
 
 //Comparison
-int es_sizecmp(size_t str1, size_t str2);
 int es_compare(StringRef str1, StringRef str2);
 int es_prefix(StringRef str1, StringRef str2);
+int es_sizecmp(size_t str1, size_t str2);
 
 // Read up to a delimiting character from the FILE*.
 String es_readline(FILE* stream, char delim, size_t max);
