@@ -1,5 +1,5 @@
 /*
- * good_string.c
+ * easy_string.c
  *
  *  Created on: Feb 19, 2014
  *      Author: nathan
@@ -21,6 +21,7 @@ static inline int shortstring(size_t size)
 static inline int shortstring_optimized(const String* str)
 { return shortstring(str->size); }
 
+//TODO: check for OOM
 //Allocate memory to a string, taking into account shortstrings
 //Return the char* to the buffer
 static inline char* autoalloc(String* str, size_t size)
