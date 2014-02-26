@@ -221,16 +221,19 @@ static inline int char_value(char c)
 int es_toul(unsigned long* result, StringRef str)
 {
 	unsigned long count = 0;
-	for(int i = 0; i <= str.size; ++i)
+	int i;
+
+	for(i = 0; i <= str.size; ++i)
 	{
-		unsigned long decimal = char_value(str.begin[i]);
-		if(decimal == -1) return 1;
+		int decimal = char_value(str.begin[i]);
+		if(decimal == -1) break;
 		const unsigned long old_count = count;
 		count *= 10;
 		//TODO: potential uncaught overflow?
 		if(count < old_count) return 1;
 		count += decimal;
 	}
+	if(i == 0) return 1;
 	*result = count;
 	return 0;
 }
