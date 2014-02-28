@@ -216,6 +216,7 @@ int es_toul(unsigned long* result, StringRef str)
 		//TODO: potential uncaught overflow?
 		if(count < old_count) return 1;
 		count += decimal;
+		if(count < old_count) return 1;
 	}
 	if(i == 0) return 1;
 	*result = count;
