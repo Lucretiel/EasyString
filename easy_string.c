@@ -11,7 +11,7 @@
 #include <ctype.h> //tolower
 #include "easy_string.h"
 
-const static size_t shortstring_max = sizeof(es_empty_string.shortstr);
+const static size_t shortstring_max = sizeof(es_empty_string.shortstr) - 1;
 
 //True if a string of this length is shortstring optimized
 static inline int shortstring(size_t size)
@@ -29,15 +29,23 @@ static inline char* autoalloc(String* str, size_t size)
 	str->size = size;
 	if(!shortstring(size))
 	{
-		char* mem = malloc(size);
+		char* mem = malloc(size + 1);
 		str->begin = mem;
-		str->alloc_end = mem + size;
+		str->alloc_end = mem + size + 1;
+		mem[size] = '\0';
 		return mem;
 	}
 	else
 	{
 		return str->shortstr;
 	}
+}
+
+static inline size_t available(const String* str)
+{
+	return shortstring_optimized(str) ?
+		sizeof(str->shortstr) :
+		str->alloc_end - str->begin;
 }
 
 char* es_cstr(String* str)
@@ -50,16 +58,10 @@ void es_free(String* str)
 { if(!shortstring_optimized(str)) free(str->begin); }
 
 String es_copy(StringRef str)
-{ return es_copy_cstrn( ES_STRREFSIZE(&str) ); }
-
-String es_copy_cstr(const char* str)
-{ return es_copy_cstrn(str, strlen(str)); }
-
-String es_copy_cstrn(const char* str, size_t size)
 {
 	String result = es_empty_string;
-	char* mem = autoalloc(&result, size);
-	memcpy(mem, str, size);
+	char* mem = autoalloc(&result, str.size);
+	memcpy(mem, str.begin, str.size);
 	return result;
 }
 
@@ -81,6 +83,7 @@ String es_move_cstrn(char* str, size_t size)
 	if(shortstring(size))
 	{
 		memcpy(result.shortstr, str, size);
+		result.shortstr[size] = '\0';
 		free(str);
 	}
 	else
@@ -134,27 +137,25 @@ void es_slices(String* str, size_t offset, size_t size)
 	if(size == 0)
 	{
 		es_clear(str);
+		return;
 	}
 
-	//If the slice will be a shortstring
-	else if(shortstring(size))
+	//Copy to shortstring memory if it's becoming a shortstring
+	else if (shortstring(size) && !shortstring_optimized(str))
 	{
-		//If the string is already a shortstring, just memmove
-		if(shortstring_optimized(str))
-			memmove(str->shortstr, str->shortstr + offset, size);
-
-		//Otherwise, memcpy then free the used memory
-		else
-		{
-			char* ptr = str->begin;
-			memcpy(str->shortstr, str->begin + offset, size);
-			free(ptr);
-		}
+		char* ptr = str->begin;
+		memcpy(str->shortstr, str->begin + offset, size);
+		str->shortstr[size] = '\0';
+		free(ptr);
 	}
 
-	//If the slice is not a shortstring, just memmove
+	//Memmove otherwise
 	else
-		memmove(str->begin, str->begin + offset, size);
+	{
+		char* mem = es_cstr(str);
+		memmove(mem, mem + offset, size);
+		mem[size] = '\0';
+	}
 
 	str->size = size;
 }
@@ -172,36 +173,18 @@ void es_append(String* str1, StringRef str2)
 {
 	size_t final_size = str1->size + str2.size;
 
-	//If the resultant string is a shortstring
-	if(shortstring(final_size))
+	if(final_size + 1 < available(str1))
 	{
-		//We can assume str1 is also a shortstring. Copy str2 and return.
-		memcpy(str1->shortstr + str1->size, str2.begin, str2.size);
-		str1->size = final_size;
+		String result = es_cat(es_ref(str1), str2);
+		es_free(str1);
+		*str1 = result;
 	}
 	else
 	{
-		/*
-		 * Just make a whole new string if:
-		 * - str1 is a shortstring but the final string isn't
-		 * - There isn't enough room in str1's buffer
-		 */
-		if(shortstring_optimized(str1) ||
-			final_size > (str1->alloc_end - str1->begin))
-		{
-			String result = es_cat(es_ref(str1), str2);
-			es_free(str1);
-			*str1 = result;
-		}
-		/*
-		 * If there's room in the buffer, memcpy to it.
-		 * This can really only happen if it was previously es_slices'd
-		 */
-		else
-		{
-			memcpy(str1->begin + str1->size, str2.begin, str2.size);
-			str1->size = final_size;
-		}
+		char* mem = es_cstr(str1);
+		memcpy(mem + str1->size, str2.begin, str2.size);
+		mem[final_size] = '\0';
+		str1->size = final_size;
 	}
 }
 

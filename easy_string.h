@@ -13,7 +13,9 @@
  *  - Strings are structs with ownership semantics; they always are considered
  *    to own their contents. They can be copied and moved. They should only be
  *    passed by value with care, because this is like a move (the new string
- *    owns its contents) but the old one isn't freed or cleared safely.
+ *    owns its contents) but the old one isn't freed or cleared safely. While
+ *    they do not have to be null terminated, most of the API guarantees that
+ *    created String objects will have a null terminator.
  *  - StringRefs are non-owning strings. They consist of a const char* and a
  *    size, and can refer to both String objects and C-style char* strings.
  */
@@ -67,13 +69,15 @@ static inline void es_clear(String* str)
 
 //Make new string, by copy
 String es_copy(StringRef str);
-String es_copy_cstr(const char* str);
-String es_copy_cstrn(const char* str, size_t size);
 
 //Make a new string, transfer ownership
 String es_move(String* str);
 String es_move_cstr(char* str);
 String es_move_cstrn(char* str, size_t size);
+/*
+ * Note that es_move_cstr will NOT add a null terminator, even if there isn't
+ * one present
+ */
 
 //Make a string ref
 StringRef es_ref(const String* str);
