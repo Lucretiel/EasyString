@@ -173,7 +173,7 @@ void es_append(String* str1, StringRef str2)
 {
 	size_t final_size = str1->size + str2.size;
 
-	if(final_size + 1 < available(str1))
+	if(available(str1) < final_size + 1)
 	{
 		String result = es_cat(es_ref(str1), str2);
 		es_free(str1);
