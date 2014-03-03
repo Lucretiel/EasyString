@@ -86,9 +86,6 @@ String es_move(String* str)
 	return result;
 }
 
-String es_move_cstr(char* str)
-{ return es_move_cstrn(str, str ? strlen(str) : 0); }
-
 String es_move_cstrn(char* str, size_t size)
 {
 	String result;
@@ -109,9 +106,6 @@ String es_move_cstrn(char* str, size_t size)
 
 StringRef es_ref(const String* str)
 { return es_tempn( ES_STRCNSTSIZE(str) ); }
-
-StringRef es_temp(const char* str)
-{ return es_tempn(str, str ? strlen(str) : 0); }
 
 StringRef es_tempn(const char* str, size_t size)
 {

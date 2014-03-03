@@ -73,17 +73,22 @@ String es_copy(StringRef str);
 
 //Make a new string, transfer ownership
 String es_move(String* str);
-String es_move_cstr(char* str);
 String es_move_cstrn(char* str, size_t size);
+
+static inline String es_move_cstr(char* str)
+{ return es_move_cstrn(str, str ? strlen(str) : 0); }
+
 /*
- * Note that es_move_cstr will NOT add a null terminator, even if there isn't
+ * Note that es_move_cstr* will NOT add a null terminator, even if there isn't
  * one present
  */
 
 //Make a string ref
 StringRef es_ref(const String* str);
-StringRef es_temp(const char* str);
 StringRef es_tempn(const char* str, size_t size);
+
+static inline StringRef es_temp(const char* str)
+{ return es_tempn(str, str ? strlen(str) : 0 ); }
 
 //Make a string slice
 StringRef es_slice(StringRef ref, size_t offset, size_t size);
