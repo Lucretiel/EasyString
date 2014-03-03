@@ -18,11 +18,25 @@
  *    created String objects will have a null terminator.
  *  - StringRefs are non-owning strings. They consist of a const char* and a
  *    size, and can refer to both String objects and C-style char* strings.
+ *
+ *  Interface notes:
+ *  - The methods that use strlen (es_tempn, es_move_cstrn) are declared
+ *    static inline, to promote complile-time optimizations of strlen on static
+ *    strings.
+ *  - Raw copies of strings (String x = y) is basically a move. Once the copy
+ *    is finished, you can safely let the old String go out of scope, as the
+ *    new string is the owner. Similarly, you can pass strings by value into
+ *    give functions ownership; the function becomes responsible for the memory,
+ *    and the old string can be let out of scope. You can return strings from
+ *    functions for the same reason.
+ *  - A String with all 0 bytes is a valid, empty string. This means that you
+ *    can calloc() Strings or arrays of Strings.
  */
 
 #pragma once
 
-#include <stdio.h>
+#include <stdio.h> //For FILE*
+#include <string.h> //For strlen
 
 //String type
 #define STRING_DATA struct { char* begin; char* alloc_end; }
@@ -58,8 +72,10 @@ const char* es_cstrc(const String* str);
 #define ES_STRCNSTSIZE(STR) (es_cstrc(STR)), ((STR)->size)
 #define ES_SIZESTRING(STR) ((STR)->size), (es_cstr(STR))
 #define ES_SIZESTRCNST(STR) ((STR)->size), (es_cstrc(STR))
+#define ES_STRINGPRINT(STR) ((int)((STR)->size)), (es_cstrc(STR))
 #define ES_STRREFSIZE(REF) ((REF)->begin), ((REF)->size)
 #define ES_SIZESTRREF(REF) ((REF)->size), ((REF)->begin)
+#define ES_STRREFPRINT(REF) ((int)((REF)->size)), ((REF)->begin)
 
 //Free a string without cleaning up. Use at the end of scope.
 void es_free(String* str);
@@ -74,14 +90,16 @@ String es_copy(StringRef str);
 //Make a new string, transfer ownership
 String es_move(String* str);
 String es_move_cstrn(char* str, size_t size);
-
 static inline String es_move_cstr(char* str)
 { return es_move_cstrn(str, str ? strlen(str) : 0); }
 
 /*
  * Note that es_move_cstr* will NOT add a null terminator, even if there isn't
- * one present
+ * one present. It's a pure pointer move.
  */
+
+//Create a string from a printf-style format string
+String es_printf(const char* format, ...);
 
 //Make a string ref
 StringRef es_ref(const String* str);

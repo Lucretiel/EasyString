@@ -10,6 +10,7 @@
 #include <stdint.h> //SIZE_MAX
 #include <ctype.h> //tolower
 #include <stdbool.h>
+#include <stdarg.h>
 #include "easy_string.h"
 
 const static size_t shortstring_max = sizeof(es_empty_string.shortstr) - 1;
@@ -102,6 +103,45 @@ String es_move_cstrn(char* str, size_t size)
 		result.alloc_end = str + size;
 	}
 	return result;
+}
+
+/*
+ * Quick recap of C variadic functions:
+ *
+ * va_list args;
+ *
+ * va_start(args, last_arg_before_variadic);
+ * TYPE next = va_get(args, TYPE); //Repeat this over and over
+ * va_end(args);
+ *
+ * Obviously don't call va_get too many times, but you can do it 0+ times
+ * between va_start and va_end. You are also welcome to do another va_start
+ * after a previous va_end to start over.
+ */
+String es_printf(const char* format, ...)
+{
+	va_list args;
+
+	//Get the number of bytes required
+	va_start(args, format);
+	int size = vsnprintf(0, 0, format, args);
+	va_end(args);
+
+	//If empty, or an error, return empty_string
+	if(!(size > 0)) return es_empty_string;
+	//TODO: find a way to report errors
+
+	//Allocate a string
+	String result;
+	char* mem = autoalloc(&result, size, 0);
+
+	//Write to string
+	va_start(args, format);
+	vsprintf(mem, format, args);
+	va_end(args);
+
+	return result;
+
 }
 
 StringRef es_ref(const String* str)
