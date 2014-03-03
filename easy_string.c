@@ -9,38 +9,47 @@
 #include <stdlib.h> //Allocation
 #include <stdint.h> //SIZE_MAX
 #include <ctype.h> //tolower
+#include <stdbool.h>
 #include "easy_string.h"
 
 const static size_t shortstring_max = sizeof(es_empty_string.shortstr) - 1;
 
+//StrinRefs with null pointers are redirected here so string ops still work
+const static char* empty_cstring = "";
+
 //True if a string of this length is shortstring optimized
-static inline int shortstring(size_t size)
+static inline bool shortstring(size_t size)
 { return size <= shortstring_max; }
 
 //True if this string is shortstring optimized
-static inline int shortstring_optimized(const String* str)
+static inline bool shortstring_optimized(const String* str)
 { return shortstring(str->size); }
 
 //TODO: check for OOM
 //Allocate memory to a string, taking into account shortstrings
 //Return the char* to the buffer
-static inline char* autoalloc(String* str, size_t size)
+//Use the hint to request a specific amount of allocation, or just pass 0
+//Hint might be ignored though. size and shortstring take precedence
+static inline char* autoalloc(String* str, size_t size, size_t hint)
 {
 	str->size = size;
+	char* mem;
 	if(!shortstring(size))
 	{
-		char* mem = malloc(size + 1);
+		size_t alloc_amount = hint > size ? hint : size + 1;
+		mem = malloc(alloc_amount);
 		str->begin = mem;
-		str->alloc_end = mem + size + 1;
-		mem[size] = '\0';
-		return mem;
+		str->alloc_end = mem + alloc_amount;
 	}
 	else
 	{
-		return str->shortstr;
+		mem = str->shortstr;
 	}
+	mem[size] = '\0';
+	return mem;
 }
 
+//Total available allocated size, including that nul terminator
 static inline size_t available(const String* str)
 {
 	return shortstring_optimized(str) ?
@@ -59,12 +68,16 @@ void es_free(String* str)
 
 String es_copy(StringRef str)
 {
-	String result = es_empty_string;
-	char* mem = autoalloc(&result, str.size);
+	String result;
+	char* mem = autoalloc(&result, str.size, 0);
 	memcpy(mem, str.begin, str.size);
 	return result;
 }
 
+/*
+ * Note that the move methods are pretty much the only way to create a string
+ * without a null terminator.
+ */
 String es_move(String* str)
 {
 	String result = *str;
@@ -74,11 +87,11 @@ String es_move(String* str)
 }
 
 String es_move_cstr(char* str)
-{ return es_move_cstrn(str, strlen(str)); }
+{ return es_move_cstrn(str, str ? strlen(str) : 0); }
 
 String es_move_cstrn(char* str, size_t size)
 {
-	String result = es_empty_string;
+	String result;
 	result.size = size;
 	if(shortstring(size))
 	{
@@ -98,11 +111,11 @@ StringRef es_ref(const String* str)
 { return es_tempn( ES_STRCNSTSIZE(str) ); }
 
 StringRef es_temp(const char* str)
-{ return es_tempn(str, strlen(str) ); }
+{ return es_tempn(str, str ? strlen(str) : 0); }
 
 StringRef es_tempn(const char* str, size_t size)
 {
-	StringRef result = {str, size};
+	StringRef result = { (str && size ? str : empty_cstring), size };
 	return result;
 }
 
@@ -122,11 +135,7 @@ static inline void update_slice_indexes(size_t str_size, size_t* offset,
 StringRef es_slice(StringRef ref, size_t offset, size_t size)
 {
 	update_slice_indexes(ref.size, &offset, &size);
-	if(size == 0)
-		return es_null_ref;
-
-	StringRef result = {ref.begin + offset, size};
-	return result;
+	return es_tempn(ref.begin + offset, size);
 }
 
 void es_slices(String* str, size_t offset, size_t size)
@@ -149,7 +158,7 @@ void es_slices(String* str, size_t offset, size_t size)
 		free(ptr);
 	}
 
-	//Memmove otherwise
+	//Memmove otherwise. There's no way to go from shortstring to normal.
 	else
 	{
 		char* mem = es_cstr(str);
@@ -163,7 +172,7 @@ void es_slices(String* str, size_t offset, size_t size)
 String es_cat(StringRef str1, StringRef str2)
 {
 	String result = es_empty_string;
-	char* dest = autoalloc(&result, str1.size + str2.size);
+	char* dest = autoalloc(&result, str1.size + str2.size, 0);
 	memcpy(dest, str1.begin, str1.size);
 	memcpy(dest + str1.size, str2.begin, str2.size);
 	return result;
@@ -171,16 +180,41 @@ String es_cat(StringRef str1, StringRef str2)
 
 void es_append(String* str1, StringRef str2)
 {
+	//Do nothing if str2 is empty.
+	if(str2.size == 0) return;
+
 	size_t final_size = str1->size + str2.size;
 
+	//If necessary, reallocate str1
 	if(available(str1) < final_size + 1)
 	{
-		String result = es_cat(es_ref(str1), str2);
+		String result;
+
+		//Wisdom says: reallocate at least double str1's buffer, when appending
+		char* mem = autoalloc(&result, final_size, available(str1) * 2);
+
+		//Copy str1 into the new string.
+		memcpy(mem, es_cstrc(str1), str1->size);
+
+		//Perform the append
+		memcpy(mem + str1->size, str2.begin, str2.size);
+		mem[final_size] = '\0';
+		str1->size = final_size;
+
+		//Free and reset str1
 		es_free(str1);
 		*str1 = result;
+
 	}
+
+	//If str1 is already big enough, append directly into it
 	else
 	{
+		/*
+		 * TODO: fix the code repetition here. The problem is that, in the former
+		 * if case, it is necessary to keep str1 around until the append is
+		 * complete, because str2 may point to it.
+		 */
 		char* mem = es_cstr(str1);
 		memcpy(mem + str1->size, str2.begin, str2.size);
 		mem[final_size] = '\0';
@@ -191,7 +225,7 @@ void es_append(String* str1, StringRef str2)
 String es_tolower(StringRef str)
 {
 	String result = es_empty_string;
-	char* copy = autoalloc(&result, str.size);
+	char* copy = autoalloc(&result, str.size, 0);
 	for(size_t i = 0; i < str.size; ++i)
 		copy[i] = tolower(str.begin[i]);
 	return result;
@@ -202,22 +236,34 @@ static inline int char_value(char c)
 	return c < '0' || c > '9' ? -1 : c - '0';
 }
 
+//TODO: meaningful error codes (overflow, no digits, etc)
 int es_toul(unsigned long* result, StringRef str)
 {
 	unsigned long count = 0;
 	int i;
 
-	for(i = 0; i <= str.size; ++i)
+	for(i = 0; i < str.size; ++i)
 	{
+		//Get digit value
 		int decimal = char_value(str.begin[i]);
+
+		//Stop loop if non-digit
 		if(decimal == -1) break;
+
+		//Store old count, shift current count
 		const unsigned long old_count = count;
 		count *= 10;
-		//TODO: potential uncaught overflow?
-		if(count < old_count) return 1;
+
+		//Check for overflow
+		if(count / 10 != old_count) return 1;
+
+		//Add digit
 		count += decimal;
+
+		//Check for overflow agai
 		if(count < old_count) return 1;
 	}
+	//If we didn't even get a single loop, it's an error
 	if(i == 0) return 1;
 	*result = count;
 	return 0;
@@ -229,8 +275,7 @@ int es_sizecmp(size_t str1, size_t str2)
 int es_compare(StringRef str1, StringRef str2)
 {
 	int sizecmp = es_sizecmp(str1.size, str2.size);
-	if(sizecmp) return sizecmp;
-	else return memcmp(str1.begin, str2.begin, str1.size);
+	return sizecmp ? sizecmp : memcmp(str1.begin, str1.begin, str1.size);
 }
 
 int es_prefix(StringRef str1, StringRef str2)
@@ -238,10 +283,13 @@ int es_prefix(StringRef str1, StringRef str2)
 	return memcmp(str1.begin, str2.begin, min_size(str1.size, str2.size));
 }
 
+//TODO: reimplement to make use of implementation details of str1.
 const static size_t buffer_size = 4096;
 String es_readline(FILE* stream, char delim, size_t max)
 {
 	String result = es_empty_string;
+
+	if(ferror(stream) || feof(stream)) return result;
 
 	int c;
 	do
@@ -254,7 +302,7 @@ String es_readline(FILE* stream, char delim, size_t max)
 		for(int i = 0; i < buffer_size && max; ++i)
 		{
 			//Read byte
-			c = fgetc(stream);
+			c = getc(stream);
 
 			//Break if EOF or error
 			if(c == EOF)

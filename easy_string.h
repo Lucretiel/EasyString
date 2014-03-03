@@ -44,9 +44,10 @@ typedef struct
 	const size_t size;
 } StringRef;
 
-//Empty values to initialize to
+//Empty value to initialize to
 const static String es_empty_string;
-const static StringRef es_null_ref;
+
+//If you REALLY need a null ref, use es_temp(0)
 
 //Get string pointer from a string
 char* es_cstr(String* str);
