@@ -55,7 +55,7 @@ typedef struct
 typedef struct
 {
 	const char* begin;
-	const size_t size;
+	size_t size;
 } StringRef;
 
 //Empty value to initialize to
