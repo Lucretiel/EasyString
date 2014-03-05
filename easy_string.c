@@ -324,7 +324,7 @@ String es_readline(FILE* stream, char delim, size_t max)
 
 	if(ferror(stream) || feof(stream)) return result;
 
-	int c;
+	int c = -1;
 	do
 	{
 		//Buffer to read into
