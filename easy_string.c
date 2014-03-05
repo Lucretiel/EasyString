@@ -233,7 +233,6 @@ void es_append(String* str1, StringRef str2)
 		//Perform the append
 		memcpy(mem + str1->size, str2.begin, str2.size);
 		mem[final_size] = '\0';
-		str1->size = final_size;
 
 		//Free and reset str1
 		es_free(str1);
