@@ -13,10 +13,11 @@
 #include <stdarg.h>
 #include "easy_string.h"
 
+//Maximum length of a shortstring.
 const static size_t shortstring_max = sizeof(es_empty_string.shortstr) - 1;
 
 //StrinRefs with null pointers are redirected here so string ops still work
-const static char* empty_cstring = "";
+const static char empty_cstring[] = "";
 
 //True if a string of this length is shortstring optimized
 static inline bool shortstring(size_t size)
@@ -27,17 +28,25 @@ static inline bool shortstring_optimized(const String* str)
 { return shortstring(str->size); }
 
 //TODO: check for OOM
-//Allocate memory to a string, taking into account shortstrings
-//Return the char* to the buffer
-//Use the hint to request a specific amount of allocation, or just pass 0
-//Hint might be ignored though. size and shortstring take precedence
+/*
+ * Allocate memory into a string, taking into account shortstrings. The
+ * string will have at least enough space to hold a null-terminated string
+ * of size `size`, TThis function adds a null-terminator in the correct
+ * place given `size` and returns a pointer to the memory. This function
+ * does not take into account the contents of `str`.
+ *
+ * `hint` primarily exists to support append operations, allowing capacity
+ * to be doubled on a reallocation, even if string length isn't. The
+ * function will try to allocate `hint` bytes, but may shortstring optimize
+ * and will always allocate at least enough for `size`.
+ */
 static inline char* autoalloc(String* str, size_t size, size_t hint)
 {
 	str->size = size;
 	char* mem;
 	if(!shortstring(size))
 	{
-		size_t alloc_amount = hint > size ? hint : size + 1;
+		size_t alloc_amount = hint > size+1 ? hint : size+1;
 		mem = malloc(alloc_amount);
 		str->begin = mem;
 		str->alloc_end = mem + alloc_amount;
@@ -78,7 +87,7 @@ String es_copy(StringRef str)
 /*
  * Note that the move methods are pretty much the only way to create a string
  * without a null terminator.
- */
+ */empt
 String es_move(String* str)
 {
 	String result = *str;
@@ -122,13 +131,14 @@ String es_printf(const char* format, ...)
 {
 	va_list args;
 
-	//Get the number of bytes required
+	//TODO: try an initial shortstr printf here.
+	//Get the number of bytes required. Also try writing as a shortstr.
 	va_start(args, format);
 	int size = vsnprintf(0, 0, format, args);
 	va_end(args);
 
 	//If empty, or an error, return empty_string
-	if(!(size > 0)) return es_empty_string;
+	if(size <= 0) return es_empty_string;
 	//TODO: find a way to report errors
 
 	//Allocate a string
@@ -165,7 +175,6 @@ static inline void update_slice_indexes(size_t str_size, size_t* offset,
 		*size = min_size(*size, str_size - *offset);
 }
 
-
 StringRef es_slice(StringRef ref, size_t offset, size_t size)
 {
 	update_slice_indexes(ref.size, &offset, &size);
@@ -192,7 +201,8 @@ void es_slices(String* str, size_t offset, size_t size)
 		free(ptr);
 	}
 
-	//Memmove otherwise. There's no way to go from shortstring to normal.
+	//Memmove otherwise. There's no way to go from shortstring to normal,
+	//and this covers shortstr->shortstr and str->str
 	else
 	{
 		char* mem = es_cstr(str);
@@ -212,7 +222,7 @@ String es_cat(StringRef str1, StringRef str2)
 	return result;
 }
 
-void es_append(String* str1, StringRef str2)
+void es_append(String* str1, const StringRef str2)
 {
 	//Do nothing if str2 is empty.
 	if(str2.size == 0) return;
@@ -224,14 +234,14 @@ void es_append(String* str1, StringRef str2)
 	{
 		String result;
 
-		//Wisdom says: reallocate at least double str1's buffer, when appending
+		//Wisdom says: allocate at least double when reallocating
 		char* mem = autoalloc(&result, final_size, available(str1) * 2);
 
 		//Copy str1 into the new string.
-		memcpy(mem, es_cstrc(str1), str1->size);
+		memcpy(mem, ES_STRCNSTSIZE(str1));
 
 		//Perform the append
-		memcpy(mem + str1->size, str2.begin, str2.size);
+		memcpy(mem + str1->size, ES_STRREFSIZE(&str2));
 		mem[final_size] = '\0';
 
 		//Free and reset str1
@@ -249,7 +259,7 @@ void es_append(String* str1, StringRef str2)
 		 * complete, because str2 may point to it.
 		 */
 		char* mem = es_cstr(str1);
-		memcpy(mem + str1->size, str2.begin, str2.size);
+		memcpy(mem + str1->size, ES_STRREFSIZE(&str2));
 		mem[final_size] = '\0';
 		str1->size = final_size;
 	}
