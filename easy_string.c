@@ -16,9 +16,6 @@
 //Maximum length of a shortstring.
 const static size_t shortstring_max = sizeof(es_empty_string.shortstr) - 1;
 
-//StrinRefs with null pointers are redirected here so string ops still work
-const static char empty_cstring[] = "";
-
 //True if a string of this length is shortstring optimized
 static inline bool shortstring(size_t size)
 { return size <= shortstring_max; }
@@ -159,7 +156,7 @@ StringRef es_ref(const String* str)
 
 StringRef es_tempn(const char* str, size_t size)
 {
-	StringRef result = { (str && size ? str : empty_cstring), size };
+	StringRef result = { (str && size ? str : ""), size };
 	return result;
 }
 
