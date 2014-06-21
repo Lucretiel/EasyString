@@ -84,7 +84,7 @@ String es_copy(StringRef str)
 /*
  * Note that the move methods are pretty much the only way to create a string
  * without a null terminator.
- */empt
+ */
 String es_move(String* str)
 {
 	String result = *str;
