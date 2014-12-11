@@ -28,9 +28,9 @@ static inline bool shortstring_optimized(const String* str)
 /*
  * Allocate memory into a string, taking into account shortstrings. The
  * string will have at least enough space to hold a null-terminated string
- * of size `size`, TThis function adds a null-terminator in the correct
+ * of size `size`, This function adds a null-terminator in the correct
  * place given `size` and returns a pointer to the memory. This function
- * does not take into account the contents of `str`.
+ * completely overwrites `str`.
  *
  * `hint` primarily exists to support append operations, allowing capacity
  * to be doubled on a reallocation, even if string length isn't. The
@@ -114,7 +114,7 @@ String es_move_cstrn(char* str, size_t size)
  * TYPE next = va_get(args, TYPE); //Repeat this over and over
  * va_end(args);
  *
- * Obviously don't call va_get too many times, but you can do it 0+ times
+ * Obviously don't call va_get too many times, but you can do it 0 to n times
  * between va_start and va_end. You are also welcome to do another va_start
  * after a previous va_end to start over.
  */
@@ -183,7 +183,7 @@ void es_slices(String* str, size_t offset, size_t size)
 	else if (shortstring(size) && !shortstring_optimized(str))
 	{
 		char* ptr = str->begin;
-		memcpy(str->shortstr, str->begin + offset, size);
+		memcpy(str->shortstr, ptr + offset, size);
 		str->shortstr[size] = '\0';
 		free(ptr);
 	}
@@ -196,7 +196,7 @@ void es_slices(String* str, size_t offset, size_t size)
 		memmove(mem, mem + offset, size);
 		mem[size] = '\0';
 	}
-	
+	str->size = size;
 }
 
 String es_cat(StringRef str1, StringRef str2)
@@ -220,30 +220,23 @@ void es_append(String* str1, const StringRef str2)
 	{
 		String result;
 
-		//Wisdom says: allocate at least double when reallocating
-		char* mem = autoalloc(&result, final_size, available(str1) * 2);
+		//Wisdom says: allocate geometrically when reallocating
+		char* mem = autoalloc(&result, final_size, (available(str1) * 3) / 2);
 
 		//Copy str1 into the new string.
 		memcpy(mem, ES_STRCNSTSIZE(str1));
 
 		//Perform the append
 		memcpy(mem + str1->size, ES_STRREFSIZE(&str2));
-		mem[final_size] = '\0';
 
 		//Free and reset str1
 		es_free(str1);
 		*str1 = result;
-
 	}
 
 	//If str1 is already big enough, append directly into it
 	else
 	{
-		/*
-		 * TODO: fix the code repetition here. The problem is that, in the former
-		 * if case, it is necessary to keep str1 around until the append is
-		 * complete, because str2 may point to it.
-		 */
 		char* mem = es_cstr(str1);
 		memcpy(mem + str1->size, ES_STRREFSIZE(&str2));
 		mem[final_size] = '\0';
