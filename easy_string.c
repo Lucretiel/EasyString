@@ -40,17 +40,12 @@ static inline bool shortstring_optimized(const String* str)
 static inline char* autoalloc(String* str, size_t size, size_t hint)
 {
 	str->size = size;
-	char* mem;
+	char* mem = str->shortstr;
 	if(!shortstring(size))
 	{
 		size_t alloc_amount = hint > size+1 ? hint : size+1;
-		mem = malloc(alloc_amount);
-		str->begin = mem;
-		str->alloc_end = mem + alloc_amount;
-	}
-	else
-	{
-		mem = str->shortstr;
+		mem = str->begin = malloc(alloc_amount);
+		str->alloc_size = alloc_amount;
 	}
 	mem[size] = '\0';
 	return mem;
@@ -61,7 +56,7 @@ static inline size_t available(const String* str)
 {
 	return shortstring_optimized(str) ?
 		sizeof(str->shortstr) :
-		str->alloc_end - str->begin;
+		str->alloc_size;
 }
 
 char* es_cstr(String* str)
@@ -76,8 +71,7 @@ void es_free(String* str)
 String es_copy(StringRef str)
 {
 	String result;
-	char* mem = autoalloc(&result, str.size, 0);
-	memcpy(mem, str.begin, str.size);
+	memcpy(autoalloc(&result, str.size, 0), str.begin, str.size);
 	return result;
 }
 
@@ -106,7 +100,7 @@ String es_move_cstrn(char* str, size_t size)
 	else
 	{
 		result.begin = str;
-		result.alloc_end = str + size;
+		result.alloc_size = size;
 	}
 	return result;
 }
@@ -129,7 +123,7 @@ String es_printf(const char* format, ...)
 	va_list args;
 
 	//TODO: try an initial shortstr printf here.
-	//Get the number of bytes required. Also try writing as a shortstr.
+	//Get the number of bytes required.
 	va_start(args, format);
 	int size = vsnprintf(0, 0, format, args);
 	va_end(args);
@@ -138,17 +132,13 @@ String es_printf(const char* format, ...)
 	if(size <= 0) return es_empty_string;
 	//TODO: find a way to report errors
 
-	//Allocate a string
 	String result;
-	char* mem = autoalloc(&result, size, 0);
 
-	//Write to string
 	va_start(args, format);
-	vsprintf(mem, format, args);
+	vsprintf(autoalloc(&result, size, 0), format, args);
 	va_end(args);
 
 	return result;
-
 }
 
 StringRef es_ref(const String* str)
@@ -199,15 +189,14 @@ void es_slices(String* str, size_t offset, size_t size)
 	}
 
 	//Memmove otherwise. There's no way to go from shortstring to normal,
-	//and this covers shortstr->shortstr and str->str
+	//and this covers "shortstr to shortstr" and "str to str"
 	else
 	{
 		char* mem = es_cstr(str);
 		memmove(mem, mem + offset, size);
 		mem[size] = '\0';
 	}
-
-	str->size = size;
+	
 }
 
 String es_cat(StringRef str1, StringRef str2)
