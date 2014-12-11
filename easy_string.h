@@ -39,7 +39,7 @@
 #include <string.h> //For strlen
 
 //String type
-#define STRING_DATA struct { char* begin; char* alloc_end; }
+#define STRING_DATA struct { char* begin; size_t alloc_size; }
 typedef struct
 {
 	union
@@ -67,7 +67,7 @@ const static String es_empty_string;
 char* es_cstr(String* str);
 const char* es_cstrc(const String* str);
 
-//Convenience macro for using in functions that take a char* and size
+//Convenience macros for using in functions that take a char* and size, like memcpy
 #define ES_STRINGSIZE(STR) (es_cstr(STR)), ((STR)->size)
 #define ES_STRCNSTSIZE(STR) (es_cstrc(STR)), ((STR)->size)
 #define ES_SIZESTRING(STR) ((STR)->size), (es_cstr(STR))
@@ -76,6 +76,7 @@ const char* es_cstrc(const String* str);
 #define ES_STRREFSIZE(REF) ((REF)->begin), ((REF)->size)
 #define ES_SIZESTRREF(REF) ((REF)->size), ((REF)->begin)
 #define ES_STRREFPRINT(REF) ((int)((REF)->size)), ((REF)->begin)
+//For instance: printf("%.*s", ES_STRINGPRINT(&str))
 
 //Free a string without cleaning up. Use at the end of scope.
 void es_free(String* str);
@@ -128,11 +129,16 @@ int es_toul(unsigned long* result, StringRef str);
 //TODO: other numeric conversions
 
 //Comparison
+//compare two strings, just like strcmp
 int es_compare(StringRef str1, StringRef str2);
+
+//prefix compare two strings. Return 0 if one string is the prefix of the other.
 int es_prefix(StringRef str1, StringRef str2);
+
+//compare string length only. Retuns what strcmp would return if the strings
+//are different lengths but otherwise identical.
 int es_sizecmp(size_t str1, size_t str2);
 
 // Read up to a delimiting character from the FILE*.
 String es_readline(FILE* stream, char delim, size_t max);
-
 String es_readanyline(FILE* stream, char delim);
