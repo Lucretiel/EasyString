@@ -292,12 +292,14 @@ int es_toul(unsigned long* result, StringRef str)
 }
 
 int es_sizecmp(size_t str1, size_t str2)
-{ return str1 < str2 ? -1 : str1 > str2 ? 1 : 0; }
+{
+	return str1 < str2 ? -1 : str1 > str2 ? 1 : 0;
+}
 
 int es_compare(StringRef str1, StringRef str2)
 {
-	int sizecmp = es_sizecmp(str1.size, str2.size);
-	return sizecmp ? sizecmp : memcmp(str1.begin, str2.begin, str1.size);
+	int cmp = es_prefix(str1, str2);
+	return cmp ? cmp : es_sizecmp(str1.size, str2.size);
 }
 
 int es_prefix(StringRef str1, StringRef str2)
