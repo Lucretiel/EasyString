@@ -39,23 +39,23 @@
 #include <string.h> //For strlen
 
 //String type
-#define STRING_DATA struct { char* begin; size_t alloc_size; }
+#define STRING_DATA struct { size_t alloc_size; char* begin; }
 typedef struct
 {
+	size_t size;
 	union
 	{
 		STRING_DATA;
 		char shortstr[sizeof(STRING_DATA)];
 	};
-	size_t size;
 } String;
 #undef STRING_DATA
 
 //StringRef type
 typedef struct
 {
-	const char* begin;
 	size_t size;
+	const char* begin;
 } StringRef;
 
 //Empty value to initialize to
