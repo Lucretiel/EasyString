@@ -24,6 +24,8 @@ static inline bool shortstring(size_t size)
 static inline bool shortstring_optimized(const String* str)
 { return shortstring(str->size); }
 
+static inline size_t word_round(size_t size)
+{ return (size + sizeof(void*) - 1) & ~(sizeof(void*) - 1); }
 //TODO: check for OOM
 /*
  * Allocate memory into a string, taking into account shortstrings. The
@@ -43,7 +45,7 @@ static inline char* autoalloc(String* str, size_t size, size_t hint)
 	char* mem = str->shortstr;
 	if(!shortstring(size))
 	{
-		size_t alloc_amount = hint > size+1 ? hint : size+1;
+		size_t alloc_amount = word_round(hint > size ? hint : size + 1);
 		mem = str->begin = malloc(alloc_amount);
 		str->alloc_size = alloc_amount;
 	}
