@@ -142,3 +142,31 @@ int es_sizecmp(size_t str1, size_t str2);
 // Read up to a delimiting character from the FILE*.
 String es_readline(FILE* stream, char delim, size_t max);
 String es_readanyline(FILE* stream, char delim);
+
+// READ_INTO allows you to use a String as a buffer. Use it like this:
+//
+//    String str;
+//    ES_READ_INTO(&str, buf, available, read, 0)
+//    {
+//        ssize_t result = read(fd, buf, size);
+//        if(result >= 0) size = result;
+//        else { /* report error */ }
+//    }
+//
+// In particular, set the `size` variable (which will be created in the local
+// scope) to the number of bytes read, so that the String's size can be updated.
+//
+// The 4 argument to ES_READ_INTO is a size hint value. It indicates how much
+// data is estimated to be read. When used and nonzero, the buffer is
+// guarenteed to have at least that much data available.
+//
+// It is safe to perform early returns, in which case the String is left
+// unchanged; specifically, the size is unchanged, though any bytes read will
+// be left in the buffer. However, internally the macro uses a for loop to
+// establish the block, so a break will only break out of the ES_READ_INTO, not
+// any enclosing loops.
+#define ES_READ_INTO(PSTRING, PBUF, AVAIL, READ, HINT) \
+	for(String* _str = (PSTRING); _str; _str=0) \
+		for(char* const PBUF = _es_begin_read_buf(_str, (HINT)); _str; _str=0) \
+			for(size_t const AVAIL = _es_begin_read_aval(_str); _str; _str=0) \
+				for(ssize_t READ = 0; _str; _es_commit_read(_str, READ), _str=0)
