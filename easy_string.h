@@ -31,6 +31,9 @@
  *    functions for the same reason.
  *  - A String with all 0 bytes is a valid, empty string. This means that you
  *    can calloc() Strings or arrays of Strings.
+ *  - In general, we guarentee that String and StringRef objects will always
+ *    have valid, non-null pointers to their data, even when the strings are
+ *    empty / 0-length.
  */
 
 #pragma once
@@ -139,6 +142,15 @@ int es_prefix(StringRef str1, StringRef str2);
 //are different lengths but otherwise identical.
 int es_sizecmp(size_t str1, size_t str2);
 
-// Read up to a delimiting character from the FILE*.
-String es_readline(FILE* stream, char delim, size_t max);
-String es_readanyline(FILE* stream, char delim);
+// ADVANCED USERS ONLY: helpers for using String as a growing buffer
+
+typedef struct {
+	size_t available;
+	char* buffer;
+} EsBuffer;
+
+EsBuffer es_buffer(String* str);
+EsBuffer es_buffer_grow(String* str);
+EsBuffer es_buffer_force_grow(String* str, size_t extra);
+void es_buffer_commit(String* str, size_t amount);
+void es_buffer_commit_unsafe(String* str, size_t amount);

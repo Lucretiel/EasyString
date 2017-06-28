@@ -13,7 +13,7 @@
 #include <stdarg.h>
 #include "easy_string.h"
 
-//Maximum length of a shortstring.
+//Maximum size of a shortstring.
 const static size_t shortstring_max = sizeof(es_empty_string.shortstr) - 1;
 
 //True if a string of this length is shortstring optimized
@@ -23,6 +23,7 @@ static inline bool shortstring(size_t size)
 //True if this string is shortstring optimized
 static inline bool shortstring_optimized(const String* str)
 { return shortstring(str->size); }
+
 
 //TODO: check for OOM
 /*
@@ -43,7 +44,7 @@ static inline char* autoalloc(String* str, size_t size, size_t hint)
 	char* mem = str->shortstr;
 	if(!shortstring(size))
 	{
-		size_t alloc_amount = hint > size+1 ? hint : size+1;
+		size_t alloc_amount = hint > size ? hint : size + 1;
 		mem = str->begin = malloc(alloc_amount);
 		str->alloc_size = alloc_amount;
 	}
@@ -51,7 +52,7 @@ static inline char* autoalloc(String* str, size_t size, size_t hint)
 	return mem;
 }
 
-//Total available allocated size, including that nul terminator
+//Total available allocated size, including that null terminator
 static inline size_t available(const String* str)
 {
 	return shortstring_optimized(str) ?
@@ -82,8 +83,7 @@ String es_copy(StringRef str)
 String es_move(String* str)
 {
 	String result = *str;
-	if(!shortstring_optimized(str))
-		*str = es_empty_string;
+	*str = es_empty_string;
 	return result;
 }
 
@@ -121,24 +121,33 @@ String es_move_cstrn(char* str, size_t size)
 String es_printf(const char* format, ...)
 {
 	va_list args;
+	String result;
 
-	//TODO: try an initial shortstr printf here.
-	//Get the number of bytes required.
+	//Get the number of bytes required. Try a shortstring print.
 	va_start(args, format);
-	int size = vsnprintf(0, 0, format, args);
+	int size = vsnprintf(result.shortstr, sizeof(result.shortstr), format, args);
 	va_end(args);
 
 	//If empty, or an error, return empty_string
-	if(size <= 0) return es_empty_string;
 	//TODO: find a way to report errors
+	if(size <= 0)
+		return es_empty_string;
 
-	String result;
+	//If the shortstring print succeeded, use that
+	else if(shortstring(size))
+	{
+		result.size = size;
+		return result;
+	}
 
-	va_start(args, format);
-	vsprintf(autoalloc(&result, size, 0), format, args);
-	va_end(args);
-
-	return result;
+	// Otherwise, allocate and retry
+	else
+	{
+		va_start(args, format);
+		vsprintf(autoalloc(&result, size, 0), format, args);
+		va_end(args);
+		return result;
+	}
 }
 
 StringRef es_ref(const String* str)
@@ -146,31 +155,40 @@ StringRef es_ref(const String* str)
 
 StringRef es_tempn(const char* str, size_t size)
 {
-	StringRef result = { (str && size ? str : ""), size };
+	StringRef result;
+	if(str && size)
+	{
+		result.begin = str;
+		result.size = size;
+	}
+	else
+	{
+		result.begin = "";
+		result.size = 0;
+	}
 	return result;
 }
 
 static inline size_t min_size(size_t x, size_t y)
 { return x < y ? x : y; }
 
-static inline void update_slice_indexes(size_t str_size, size_t* offset,
-	size_t* size)
+static inline size_t corrected_size(size_t str_size, size_t offset,
+	size_t size)
 {
-	if(*offset >= str_size)
-		*size = 0;
-	else
-		*size = min_size(*size, str_size - *offset);
+	return offset >= str_size ? 0 : min_size(size, str_size - offset);
 }
 
 StringRef es_slice(StringRef ref, size_t offset, size_t size)
 {
-	update_slice_indexes(ref.size, &offset, &size);
-	return es_tempn(ref.begin + offset, size);
+	return es_tempn(ref.begin + offset, corrected_size(ref.size, offset, size));
 }
 
 void es_slices(String* str, size_t offset, size_t size)
 {
-	update_slice_indexes(str->size, &offset, &size);
+	if(str->size == 0)
+		return;
+
+	size = corrected_size(str->size, offset, size);
 
 	//Just clear the string if the result will be empty
 	if(size == 0)
@@ -179,24 +197,44 @@ void es_slices(String* str, size_t offset, size_t size)
 		return;
 	}
 
+	//Do nothing if the slice is the same size as the original string
+	else if (size == str->size)
+	{
+		return;
+	}
+
 	//Copy to shortstring memory if it's becoming a shortstring
 	else if (shortstring(size) && !shortstring_optimized(str))
 	{
 		char* ptr = str->begin;
-		memcpy(str->shortstr, ptr + offset, size);
-		str->shortstr[size] = '\0';
+		char* dst = memcpy(str->shortstr, ptr + offset, size);
 		free(ptr);
+
+		dst[size] = '\0';
+		str->size = size;
+		return;
 	}
 
-	//Memmove otherwise. There's no way to go from shortstring to normal,
-	//and this covers "shortstr to shortstr" and "str to str"
+	// Note that for these last two blocks, we're doing either "short to short"
+	// or "alloc to alloc"
+
+	// If the offset is 0, just update the size.
+	else if (offset == 0)
+	{
+		es_cstr(str)[size] = '\0';
+		str->size = size;
+		return;
+	}
+
+	//Memmove otherwise.
 	else
 	{
-		char* mem = es_cstr(str);
-		memmove(mem, mem + offset, size);
-		mem[size] = '\0';
+		dst = es_cstr(str);
+		memmove(dst, dst + offset, size);
+		dst[size] = '\0'
+		str->size = size;
+		return;
 	}
-	str->size = size;
 }
 
 String es_cat(StringRef str1, StringRef str2)
@@ -210,38 +248,14 @@ String es_cat(StringRef str1, StringRef str2)
 
 void es_append(String* str1, const StringRef str2)
 {
-	//Do nothing if str2 is empty.
 	if(str2.size == 0) return;
 
-	size_t final_size = str1->size + str2.size;
+	EsBuffer buf = es_buffer_grow(str1, str2.size + 1);
 
-	//If necessary, reallocate str1
-	if(available(str1) < final_size + 1)
-	{
-		String result;
+	memcpy(buf.buffer, ES_STRREFSIZE(&str2));
+	buf.buffer[str2.size] = '\0'
 
-		//Wisdom says: allocate geometrically when reallocating
-		char* mem = autoalloc(&result, final_size, (available(str1) * 3) / 2);
-
-		//Copy str1 into the new string.
-		memcpy(mem, ES_STRCNSTSIZE(str1));
-
-		//Perform the append
-		memcpy(mem + str1->size, ES_STRREFSIZE(&str2));
-
-		//Free and reset str1
-		es_free(str1);
-		*str1 = result;
-	}
-
-	//If str1 is already big enough, append directly into it
-	else
-	{
-		char* mem = es_cstr(str1);
-		memcpy(mem + str1->size, ES_STRREFSIZE(&str2));
-		mem[final_size] = '\0';
-		str1->size = final_size;
-	}
+	es_buffer_grow_commit(str2.size);
 }
 
 String es_tolower(StringRef str)
@@ -256,39 +270,6 @@ String es_tolower(StringRef str)
 static inline int char_value(char c)
 {
 	return c < '0' || c > '9' ? -1 : c - '0';
-}
-
-//TODO: meaningful error codes (overflow, no digits, etc)
-int es_toul(unsigned long* result, StringRef str)
-{
-	unsigned long count = 0;
-	int i;
-
-	for(i = 0; i < str.size; ++i)
-	{
-		//Get digit value
-		int decimal = char_value(str.begin[i]);
-
-		//Stop loop if non-digit
-		if(decimal == -1) break;
-
-		//Store old count, shift current count
-		const unsigned long old_count = count;
-		count *= 10;
-
-		//Check for overflow
-		if(count / 10 != old_count) return 1;
-
-		//Add digit
-		count += decimal;
-
-		//Check for overflow agai
-		if(count < old_count) return 1;
-	}
-	//If we didn't even get a single loop, it's an error
-	if(i == 0) return 1;
-	*result = count;
-	return 0;
 }
 
 int es_sizecmp(size_t str1, size_t str2)
@@ -307,49 +288,52 @@ int es_prefix(StringRef str1, StringRef str2)
 	return memcmp(str1.begin, str2.begin, min_size(str1.size, str2.size));
 }
 
-//TODO: reimplement to make use of implementation details of str1.
-const static size_t buffer_size = 4096;
-String es_readline(FILE* stream, char delim, size_t max)
+static inline EsBuffer compute_buffer_partial(char* begin, size_t size, size_t buf_available)
 {
-	String result = es_empty_string;
-
-	if(ferror(stream) || feof(stream)) return result;
-
-	int c = -1;
-	do
-	{
-		//Buffer to read into
-		char buffer[buffer_size];
-
-		//Read in up to buffer_size bytes or until max is reached
-		size_t amount_read = 0;
-		for(int i = 0; i < buffer_size && max; ++i)
-		{
-			//Read byte
-			c = getc(stream);
-
-			//Break if EOF or error
-			if(c == EOF)
-				break;
-
-			//Fill byte
-			buffer[i] = c;
-			++amount_read;
-			--max;
-
-			//Break if delimiter
-			if(c == delim)
-				break;
-		}
-		//Concat the bytes into the result string
-		es_append(&result, es_tempn(buffer, amount_read));
-
-	//Repeat until Error, delimiter found, or max reached.
-	} while(c != EOF && c != delim && max);
-
+	EsBuffer result = {buf_available, begin + size}
 	return result;
 }
 
-String es_readanyline(FILE* stream, char delim)
-{ return es_readline(stream, delim, SIZE_MAX); }
+static inline EsBuffer compute_buffer(char* begin, size_t size, size_t available)
+{
+	return compute_buffer_partial(begin, size, available - size)
+}
 
+EsBuffer es_buffer(String* str)
+{
+	return compute_buffer(es_cstr(str), str->size, available(str))
+}
+
+EsBuffer es_buffer_grow(String* str, size_t extra)
+{
+	// Rationalle: it is very common for strings to be allocated with size + 1
+	// == available, due to the trailing \0. We'd rather just reallocate if we
+	// have a trailing null, on the assumtion that the user will want to read
+	// more than one byte into the buffer.
+	extra = extra ? extra : 2;
+
+	size_t buf_available = available(str) - str->size;
+	if(buf_available < extra)
+		return es_buffer_force_grow(str, 0);
+	else
+		return compute_buffer_partial(es_cstr(str), str->size, buf_available)
+}
+
+EsBuffer es_buffer_force_grow(String* str, size_t extra)
+{
+	String new_str;
+
+	char* mem = autoalloc(&new_str, str->size + extra, (available(str) * 3) / 2);
+
+	memcpy(mem, ES_STRCNSTSIZE(str));
+
+	es_free(str)
+	*str = new_str;
+
+	return compute_buffer(new_str.begin, new_str.size, new_str.alloc_size)
+}
+
+void es_buffer_commit(String* str, size_t amount)
+{
+	str->size += amount
+}
